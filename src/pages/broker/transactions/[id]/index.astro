@@ -1,0 +1,475 @@
+---
+import BrokerLayout from '~/layouts/BrokerLayout.astro';
+import Button from '~/components/ui/Button.astro';
+import Badge from '~/components/ui/Badge.astro';
+import { db } from '~/lib/db';
+import { transactions, properties, transactionStages, transactionParticipants, activityLog, propertyPhotos, user as userTable } from '~/db/schema';
+import { eq, and, desc, asc } from 'drizzle-orm';
+import { typeLabels, typeBadgeVariant, statusLabels, statusBadgeVariant, roleLabels, stageStatusIcon, formatDate, formatDateTime } from '~/lib/labels';
+
+const { id } = Astro.params;
+const currentUser = Astro.locals.user!;
+
+// Fetch transaction + verify ownership
+const [tx] = await db
+  .select()
+  .from(transactions)
+  .where(and(eq(transactions.id, id!), eq(transactions.brokerId, currentUser.id)));
+
+if (!tx) {
+  return Astro.redirect('/broker/transactions');
+}
+
+// Fetch related data in parallel
+const [property, stages, participants, activities, coverPhotos] = await Promise.all([
+  tx.propertyId
+    ? db.select().from(properties).where(eq(properties.id, tx.propertyId)).then(r => r[0] ?? null)
+    : Promise.resolve(null),
+  db.select().from(transactionStages).where(eq(transactionStages.transactionId, tx.id)).orderBy(transactionStages.orderIndex),
+  db
+    .select({
+      id: transactionParticipants.id,
+      role: transactionParticipants.role,
+      addedAt: transactionParticipants.addedAt,
+      userId: transactionParticipants.userId,
+      name: userTable.name,
+      email: userTable.email,
+    })
+    .from(transactionParticipants)
+    .leftJoin(userTable, eq(transactionParticipants.userId, userTable.id))
+    .where(eq(transactionParticipants.transactionId, tx.id)),
+  db
+    .select({
+      id: activityLog.id,
+      action: activityLog.action,
+      createdAt: activityLog.createdAt,
+      userName: userTable.name,
+    })
+    .from(activityLog)
+    .leftJoin(userTable, eq(activityLog.userId, userTable.id))
+    .where(eq(activityLog.transactionId, tx.id))
+    .orderBy(desc(activityLog.createdAt))
+    .limit(10),
+  tx.propertyId
+    ? db.select().from(propertyPhotos).where(eq(propertyPhotos.propertyId, tx.propertyId)).orderBy(asc(propertyPhotos.orderIndex)).limit(1)
+    : Promise.resolve([]),
+]);
+
+const coverPhoto = coverPhotos[0] ?? null;
+
+
+const currentStage = stages.find(s => s.status === 'current') ?? stages[stages.length - 1];
+const isCompleted = tx.status === 'completed' || tx.status === 'cancelled';
+---
+
+<BrokerLayout title={tx.title}>
+  <!-- Breadcrumb -->
+  <div class="flex items-center gap-2 text-sm text-slate-500 mb-6">
+    <a href="/broker/transactions" class="hover:text-slate-700 transition-colors">Transactions</a>
+    <svg class="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+    <span class="text-slate-900 font-medium truncate max-w-xs">{tx.title}</span>
+  </div>
+
+  <!-- Transaction header -->
+  <div class="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+      <div>
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <h1 class="text-xl font-semibold tracking-tight text-slate-900">{tx.title}</h1>
+          <Badge variant={typeBadgeVariant[tx.type] ?? 'neutral'}>{typeLabels[tx.type] ?? tx.type}</Badge>
+          <Badge variant={statusBadgeVariant[tx.status ?? 'active'] ?? 'neutral'}>
+            {statusLabels[tx.status ?? 'active'] ?? tx.status}
+          </Badge>
+        </div>
+        <p class="text-sm text-slate-500">Creee le {formatDate(tx.createdAt)}</p>
+        {tx.closingDate && (
+          <p class="text-sm text-slate-500">Cloture prevue : <span class="font-medium text-slate-700">{formatDate(tx.closingDate)}</span></p>
+        )}
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        {!isCompleted && currentStage && (
+          <button
+            id="advance-stage-btn"
+            data-transaction-id={tx.id}
+            data-current-order={currentStage.orderIndex}
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 active:scale-[0.98] transition-all duration-200 shadow-sm disabled:opacity-50"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+            Avancer l'etape
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left column -->
+    <div class="lg:col-span-2 space-y-6">
+
+      <!-- Stage timeline -->
+      <div class="bg-white rounded-xl border border-slate-200 p-6">
+        <h2 class="font-semibold text-slate-900 mb-5">Etapes de la transaction</h2>
+        {stages.length === 0 ? (
+          <p class="text-sm text-slate-400 italic">Aucune etape configuree.</p>
+        ) : (
+          <ol class="relative">
+            {stages.map((stage, idx) => (
+              <li class={`relative pl-8 ${idx < stages.length - 1 ? 'pb-6' : ''}`}>
+                <!-- Vertical line -->
+                {idx < stages.length - 1 && (
+                  <div class={`absolute left-3 top-5 w-0.5 bottom-0 ${stage.status === 'completed' ? 'bg-emerald-300' : 'bg-slate-200'}`}></div>
+                )}
+
+                <!-- Status dot -->
+                <div class={`absolute left-0 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 border-2 ${
+                  stage.status === 'completed'
+                    ? 'bg-emerald-500 border-emerald-500'
+                    : stage.status === 'current'
+                    ? 'bg-white border-violet-500 ring-4 ring-violet-100'
+                    : stage.status === 'skipped'
+                    ? 'bg-slate-200 border-slate-300'
+                    : 'bg-white border-slate-300'
+                }`}>
+                  {stage.status === 'completed' && (
+                    <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {stage.status === 'current' && (
+                    <span class="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></span>
+                  )}
+                  {stage.status === 'skipped' && (
+                    <svg class="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  )}
+                </div>
+
+                <!-- Stage content -->
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class={`text-sm font-semibold ${
+                      stage.status === 'current'
+                        ? 'text-slate-900'
+                        : stage.status === 'completed'
+                        ? 'text-slate-700'
+                        : 'text-slate-400'
+                    }`}>
+                      {stage.name}
+                    </span>
+                    {stage.status === 'current' && (
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/20">
+                        En cours
+                      </span>
+                    )}
+                  </div>
+                  {stage.description && (
+                    <p class={`text-xs mt-0.5 ${stage.status === 'pending' ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {stage.description}
+                    </p>
+                  )}
+                  {stage.completedAt && (
+                    <p class="text-xs text-slate-400 mt-0.5">Completee le {formatDate(stage.completedAt)}</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <!-- Property info -->
+      {property && (
+        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div class="flex flex-col sm:flex-row">
+            {/* Photo thumbnail */}
+            {coverPhoto ? (
+              <div class="sm:w-48 h-36 sm:h-auto flex-shrink-0">
+                <img
+                  src={`/api/files/${coverPhoto.url}`}
+                  alt="Photo de la propriete"
+                  class="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div class="sm:w-48 h-36 sm:h-auto flex-shrink-0 bg-slate-100 flex items-center justify-center">
+                <svg class="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            )}
+            {/* Property details */}
+            <div class="p-6 flex-1">
+              <div class="flex items-start justify-between gap-3 mb-3">
+                <h2 class="font-semibold text-slate-900">Propriete</h2>
+                <a
+                  href={`/broker/transactions/${tx.id}/property`}
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 text-xs font-medium text-violet-700 hover:bg-violet-100 transition-all duration-200 ring-1 ring-inset ring-violet-600/20 flex-shrink-0"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  Voir la fiche complete
+                </a>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-1">Adresse</p>
+                  <p class="text-sm text-slate-900 font-medium">{property.address}</p>
+                  <p class="text-sm text-slate-500">{property.city}, {property.province}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-1">Type</p>
+                  <p class="text-sm text-slate-900">{property.propertyType}</p>
+                </div>
+                {(property.bedrooms || property.bathrooms) && (
+                  <div>
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-1">Configuration</p>
+                    <p class="text-sm text-slate-900">
+                      {property.bedrooms ? `${property.bedrooms} ch.` : ''}
+                      {property.bedrooms && property.bathrooms ? ' · ' : ''}
+                      {property.bathrooms ? `${property.bathrooms} s.d.b.` : ''}
+                    </p>
+                  </div>
+                )}
+                {property.listingPrice && (
+                  <div>
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-1">Prix demande</p>
+                    <p class="text-sm font-semibold text-slate-900">
+                      {new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(property.listingPrice)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <!-- Recent activity -->
+      <div class="bg-white rounded-xl border border-slate-200 p-6">
+        <h2 class="font-semibold text-slate-900 mb-4">Activite recente</h2>
+        {activities.length === 0 ? (
+          <p class="text-sm text-slate-400 italic">Aucune activite enregistree.</p>
+        ) : (
+          <ul class="space-y-3">
+            {activities.map((activity) => (
+              <li class="flex items-start gap-3">
+                <div class="w-7 h-7 bg-slate-50 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ring-1 ring-inset ring-slate-200">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm text-slate-700">{activity.action}</p>
+                  <p class="text-xs text-slate-400 mt-0.5">
+                    {activity.userName ?? 'Systeme'} · {formatDateTime(activity.createdAt)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="space-y-6">
+      <!-- Quick actions -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5">
+        <h2 class="font-semibold text-slate-900 text-sm mb-4">Actions rapides</h2>
+        <div class="space-y-1">
+          <a
+            href={`/broker/transactions/${tx.id}/chat`}
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-all duration-200 w-full text-left"
+          >
+            <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            Messagerie
+          </a>
+          <a
+            href={`/broker/transactions/${tx.id}/documents`}
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-all duration-200 w-full text-left"
+          >
+            <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Documents
+          </a>
+          <a
+            href={`/broker/transactions/${tx.id}/settings`}
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-all duration-200 w-full text-left"
+          >
+            <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Parametres
+          </a>
+        </div>
+      </div>
+
+      <!-- Participants -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-semibold text-slate-900 text-sm">Participants</h2>
+          <button
+            id="add-participant-btn"
+            class="text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors"
+          >
+            + Ajouter
+          </button>
+        </div>
+
+        {participants.length === 0 ? (
+          <p class="text-xs text-slate-400 italic">Aucun participant ajoute.</p>
+        ) : (
+          <ul class="space-y-3">
+            {participants.map((p) => (
+              <li class="flex items-center gap-2.5">
+                <div class="w-7 h-7 bg-violet-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span class="text-xs font-semibold text-violet-700">
+                    {p.name?.charAt(0).toUpperCase() ?? '?'}
+                  </span>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs font-medium text-slate-900 truncate">{p.name ?? p.email ?? 'Inconnu'}</p>
+                  <p class="text-xs text-slate-400">{roleLabels[p.role] ?? p.role}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <!-- Add participant form (hidden by default) -->
+        <div id="add-participant-form" class="hidden mt-4 pt-4 border-t border-slate-100">
+          <div class="space-y-3">
+            <input
+              id="participant-email"
+              type="email"
+              placeholder="courriel@exemple.com"
+              class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            />
+            <select
+              id="participant-role"
+              class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            >
+              <option value="buyer">Acheteur</option>
+              <option value="seller">Vendeur</option>
+              <option value="notary">Notaire</option>
+              <option value="inspector">Inspecteur</option>
+              <option value="tenant">Locataire</option>
+              <option value="landlord">Proprietaire</option>
+            </select>
+            <div id="participant-error" class="hidden text-xs text-red-600"></div>
+            <div class="flex gap-2">
+              <button
+                id="participant-cancel"
+                class="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 transition-all duration-150"
+              >
+                Annuler
+              </button>
+              <button
+                id="participant-submit"
+                class="flex-1 px-3 py-1.5 rounded-lg bg-violet-600 text-xs text-white font-medium hover:bg-violet-700 transition-all duration-150 disabled:opacity-50"
+              >
+                Ajouter
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</BrokerLayout>
+
+<script>
+  const txId = document.getElementById('advance-stage-btn')?.dataset.transactionId;
+  const currentOrder = document.getElementById('advance-stage-btn')?.dataset.currentOrder;
+
+  // Advance stage
+  document.getElementById('advance-stage-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('advance-stage-btn') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = 'Avancement...';
+
+    try {
+      const res = await fetch(`/api/transactions/${txId}/stages`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'advance', stageOrder: parseInt(currentOrder ?? '1') }),
+      });
+
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        const data = await res.json();
+        alert(data.error ?? 'Impossible d\'avancer l\'etape.');
+        btn.disabled = false;
+        btn.textContent = 'Avancer l\'etape';
+      }
+    } catch {
+      alert('Erreur reseau. Veuillez reessayer.');
+      btn.disabled = false;
+    }
+  });
+
+  // Participant add/cancel toggle
+  const addBtn = document.getElementById('add-participant-btn');
+  const addForm = document.getElementById('add-participant-form');
+  const cancelBtn = document.getElementById('participant-cancel');
+
+  addBtn?.addEventListener('click', () => {
+    addForm?.classList.toggle('hidden');
+  });
+  cancelBtn?.addEventListener('click', () => {
+    addForm?.classList.add('hidden');
+  });
+
+  // Submit participant
+  document.getElementById('participant-submit')?.addEventListener('click', async () => {
+    const email = (document.getElementById('participant-email') as HTMLInputElement).value.trim();
+    const role = (document.getElementById('participant-role') as HTMLSelectElement).value;
+    const errorEl = document.getElementById('participant-error')!;
+    const submitBtn = document.getElementById('participant-submit') as HTMLButtonElement;
+
+    errorEl.classList.add('hidden');
+
+    if (!email) {
+      errorEl.textContent = 'Veuillez entrer une adresse courriel.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    submitBtn.disabled = true;
+
+    try {
+      const res = await fetch(`/api/transactions/${txId}/participants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        errorEl.textContent = data.error ?? 'Erreur lors de l\'ajout.';
+        errorEl.classList.remove('hidden');
+        submitBtn.disabled = false;
+        return;
+      }
+
+      window.location.reload();
+    } catch {
+      errorEl.textContent = 'Erreur reseau. Veuillez reessayer.';
+      errorEl.classList.remove('hidden');
+      submitBtn.disabled = false;
+    }
+  });
+</script>

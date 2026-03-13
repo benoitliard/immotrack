@@ -1,0 +1,34 @@
+---
+import BaseLayout from './BaseLayout.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 px-4 py-12">
+    <div class="w-full max-w-md">
+      <!-- Brand -->
+      <div class="text-center mb-8">
+        <a href="/" class="inline-flex items-center gap-2.5 group">
+          <span class="text-2xl font-bold tracking-tight text-slate-900">Immo<span class="text-violet-600">Track</span></span>
+        </a>
+        <p class="mt-2 text-sm text-slate-500">Plateforme immobiliere professionnelle</p>
+      </div>
+
+      <!-- Card -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+        <slot />
+      </div>
+
+      <!-- Footer -->
+      <p class="text-center text-xs text-slate-400 mt-6">
+        &copy; {new Date().getFullYear()} ImmoTrack. Tous droits reserves.
+      </p>
+    </div>
+  </div>
+</BaseLayout>

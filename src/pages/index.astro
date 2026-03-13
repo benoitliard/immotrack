@@ -1,0 +1,146 @@
+---
+import BaseLayout from '~/layouts/BaseLayout.astro';
+
+const user = Astro.locals.user as (typeof Astro.locals.user & { role?: string }) | null;
+
+// Redirect authenticated users to their dashboard
+if (user) {
+  if (user.role === 'broker' || user.role === 'admin') {
+    return Astro.redirect('/broker/dashboard');
+  }
+  return Astro.redirect('/portal');
+}
+---
+
+<BaseLayout title="ImmoTrack — Suivi immobilier">
+  <!-- Nav bar -->
+  <header class="bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-2.5">
+          <span class="text-xl font-bold tracking-tight text-slate-900">Immo<span class="text-violet-600">Track</span></span>
+        </a>
+        <div class="flex items-center gap-3">
+          <a href="/login" class="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+            Se connecter
+          </a>
+          <a href="/signup" class="inline-flex items-center px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-all duration-200 shadow-sm">
+            Creer un compte
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="relative overflow-hidden bg-white py-24 sm:py-32 px-4 sm:px-6 lg:px-8">
+    <!-- Subtle grid background -->
+    <div class="absolute inset-0 bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px),linear-gradient(to_bottom,#f1f5f9_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]"></div>
+
+    <div class="relative max-w-4xl mx-auto text-center">
+      <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-50 text-violet-700 text-xs font-medium ring-1 ring-inset ring-violet-600/20 mb-8">
+        Plateforme pour courtiers immobiliers au Quebec
+      </span>
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight text-slate-900 leading-[1.1] mb-6">
+        Suivez vos transactions<br />
+        <span class="font-semibold">immobilieres en temps reel</span>
+      </h1>
+      <p class="text-lg text-slate-500 max-w-2xl mx-auto mb-10 leading-relaxed">
+        ImmoTrack connecte les courtiers et leurs clients a chaque etape d'une transaction immobiliere au Quebec -- de la promesse d'achat jusqu'a la remise des cles.
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="/login" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 active:scale-[0.98] shadow-sm transition-all duration-200">
+          Espace courtier
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+        </a>
+        <a href="/login" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-white text-slate-700 text-sm font-medium border border-slate-200 hover:bg-slate-50 active:scale-[0.98] shadow-sm transition-all duration-200">
+          Portail client
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="text-3xl font-semibold tracking-tight text-slate-900 mb-4">Tout ce dont vous avez besoin</h2>
+        <p class="text-slate-500 text-lg max-w-2xl mx-auto">
+          Une plateforme complete pour gerer chaque transaction de A a Z, en conformite avec les normes de l'OACIQ.
+        </p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Feature 1 -->
+        <div class="bg-white rounded-xl border border-slate-200 p-8 hover:shadow-md transition-shadow duration-200 group">
+          <div class="w-10 h-10 bg-violet-50 rounded-lg flex items-center justify-center mb-5 ring-1 ring-inset ring-violet-600/10">
+            <svg class="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold text-slate-900 mb-2">Suivi en temps reel</h3>
+          <p class="text-sm text-slate-500 leading-relaxed">
+            Visualisez l'avancement de chaque transaction a travers toutes les etapes cles, de la promesse d'achat a la remise des cles.
+          </p>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="bg-white rounded-xl border border-slate-200 p-8 hover:shadow-md transition-shadow duration-200 group">
+          <div class="w-10 h-10 bg-violet-50 rounded-lg flex items-center justify-center mb-5 ring-1 ring-inset ring-violet-600/10">
+            <svg class="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold text-slate-900 mb-2">Communication centralisee</h3>
+          <p class="text-sm text-slate-500 leading-relaxed">
+            Echangez directement avec vos clients, notaires et inspecteurs dans un fil de discussion par transaction. Fini les courriels eparpilles.
+          </p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="bg-white rounded-xl border border-slate-200 p-8 hover:shadow-md transition-shadow duration-200 group">
+          <div class="w-10 h-10 bg-violet-50 rounded-lg flex items-center justify-center mb-5 ring-1 ring-inset ring-violet-600/10">
+            <svg class="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold text-slate-900 mb-2">Documents securises</h3>
+          <p class="text-sm text-slate-500 leading-relaxed">
+            Partagez et gerez tous vos documents de transaction en toute securite -- formulaires OACIQ, certificat de localisation, actes notaries.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="bg-slate-900 py-20 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-3xl font-semibold tracking-tight text-white mb-4">
+        Pret a simplifier vos transactions ?
+      </h2>
+      <p class="text-slate-400 text-lg mb-8">
+        Rejoignez les courtiers quebecois qui font confiance a ImmoTrack pour accompagner leurs clients.
+      </p>
+      <a href="/signup" class="inline-flex items-center gap-2 px-8 py-3 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 active:scale-[0.98] transition-all duration-200 shadow-sm">
+        Commencer gratuitement
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-100 py-8 px-4">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <span class="font-bold tracking-tight text-slate-700">Immo<span class="text-violet-600">Track</span></span>
+      </div>
+      <p class="text-sm text-slate-400">
+        &copy; {new Date().getFullYear()} ImmoTrack. Tous droits reserves. Concu pour les courtiers du Quebec.
+      </p>
+    </div>
+  </footer>
+</BaseLayout>

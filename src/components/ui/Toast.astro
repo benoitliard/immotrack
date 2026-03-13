@@ -1,0 +1,124 @@
+---
+// Toast notification container — place once in a layout or page.
+// Listens for custom 'toast' events dispatched from anywhere on the page.
+//
+// Usage (from any script):
+//   window.dispatchEvent(new CustomEvent('toast', {
+//     detail: { message: 'Sauvegardé !', type: 'success' }
+//   }));
+//
+// Types: 'success' | 'error' | 'info'
+---
+
+<div
+  id="toast-container"
+  class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 w-full max-w-sm pointer-events-none"
+  aria-live="polite"
+  aria-atomic="false"
+  role="status"
+>
+</div>
+
+<script>
+  type ToastType = 'success' | 'error' | 'info';
+
+  interface ToastDetail {
+    message: string;
+    type?: ToastType;
+    duration?: number;
+  }
+
+  const CONFIGS: Record<ToastType, { icon: string; classes: string }> = {
+    success: {
+      icon: `<svg class="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>`,
+      classes: 'border-l-[3px] border-emerald-500',
+    },
+    error: {
+      icon: `<svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>`,
+      classes: 'border-l-[3px] border-red-500',
+    },
+    info: {
+      icon: `<svg class="w-5 h-5 text-violet-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>`,
+      classes: 'border-l-[3px] border-violet-500',
+    },
+  };
+
+  function showToast(message: string, type: ToastType = 'info', duration = 5000): void {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const config = CONFIGS[type];
+    const toast = document.createElement('div');
+    const toastId = `toast-${Date.now()}`;
+    toast.id = toastId;
+    toast.className = [
+      'flex items-start gap-3 bg-white rounded-xl shadow-lg p-4',
+      'pointer-events-auto border border-slate-200',
+      'translate-y-2 opacity-0 transition-all duration-300 ease-out',
+      config.classes,
+    ].join(' ');
+
+    // Icon: static trusted SVG markup
+    const iconWrapper = document.createElement('span');
+    iconWrapper.className = 'flex-shrink-0';
+    iconWrapper.innerHTML = config.icon;
+
+    // Message: safe text node only
+    const msgEl = document.createElement('p');
+    msgEl.className = 'flex-1 text-sm font-medium text-slate-800 pt-0.5';
+    msgEl.textContent = message;
+
+    // Close button: built via DOM API
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'flex-shrink-0 p-0.5 rounded text-slate-400 hover:text-slate-600 transition-colors';
+    closeBtn.setAttribute('aria-label', 'Fermer la notification');
+    closeBtn.innerHTML = `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>`;
+    closeBtn.addEventListener('click', () => dismissToast(toast));
+
+    toast.appendChild(iconWrapper);
+    toast.appendChild(msgEl);
+    toast.appendChild(closeBtn);
+
+    container.appendChild(toast);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+      });
+    });
+
+    // Auto-dismiss
+    const timer = setTimeout(() => dismissToast(toast), duration);
+
+    // Pause on hover
+    toast.addEventListener('mouseenter', () => clearTimeout(timer));
+    toast.addEventListener('mouseleave', () => {
+      setTimeout(() => dismissToast(toast), 1500);
+    });
+  }
+
+  function dismissToast(toast: HTMLElement): void {
+    toast.classList.add('opacity-0', 'translate-y-2');
+    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+  }
+
+  // Listen for global toast events
+  window.addEventListener('toast', (e: Event) => {
+    const { message, type, duration } = (e as CustomEvent<ToastDetail>).detail;
+    showToast(message, type ?? 'info', duration ?? 5000);
+  });
+
+  // Expose globally for easy use from other scripts
+  (window as typeof window & { showToast: typeof showToast }).showToast = showToast;
+</script>

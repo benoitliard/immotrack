@@ -1,0 +1,276 @@
+---
+import BrokerLayout from '~/layouts/BrokerLayout.astro';
+import Button from '~/components/ui/Button.astro';
+
+// Handle redirect after successful POST (from API)
+const successId = Astro.url.searchParams.get('created');
+if (successId) {
+  return Astro.redirect(`/broker/transactions/${successId}`);
+}
+---
+
+<BrokerLayout title="Nouvelle transaction">
+  <div class="max-w-2xl">
+    <!-- Header -->
+    <div class="mb-8">
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-2">
+        <a href="/broker/transactions" class="hover:text-slate-700 transition-colors">Transactions</a>
+        <svg class="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        <span class="text-slate-900 font-medium">Nouvelle transaction</span>
+      </div>
+      <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Nouvelle transaction</h1>
+      <p class="text-slate-500 mt-1">Renseignez les informations de base pour creer votre transaction.</p>
+    </div>
+
+    <!-- Error banner -->
+    <div id="form-error" class="hidden mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-2.5">
+      <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <p id="form-error-text" class="text-sm text-red-700"></p>
+    </div>
+
+    <form id="new-transaction-form" class="space-y-8">
+      <!-- Transaction info -->
+      <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
+        <h2 class="font-semibold text-slate-900 text-base">Informations generales</h2>
+
+        <div class="space-y-1.5">
+          <label for="title" class="block text-sm font-medium text-slate-700">
+            Titre de la transaction <span class="text-red-500">*</span>
+          </label>
+          <input
+            id="title"
+            name="title"
+            type="text"
+            required
+            placeholder="Ex : Achat 123 rue des Erables, Montreal"
+            class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+          />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div class="space-y-1.5">
+            <label for="type" class="block text-sm font-medium text-slate-700">
+              Type <span class="text-red-500">*</span>
+            </label>
+            <select
+              id="type"
+              name="type"
+              required
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            >
+              <option value="purchase">Achat</option>
+              <option value="sale">Vente</option>
+              <option value="rental">Location</option>
+            </select>
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="closing_date" class="block text-sm font-medium text-slate-700">
+              Date de cloture prevue
+            </label>
+            <input
+              id="closing_date"
+              name="closing_date"
+              type="date"
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="notes" class="block text-sm font-medium text-slate-700">Notes</label>
+          <textarea
+            id="notes"
+            name="notes"
+            rows="3"
+            placeholder="Notes internes ou informations importantes..."
+            class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150 resize-none"
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- Property info -->
+      <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
+        <div>
+          <h2 class="font-semibold text-slate-900 text-base">Propriete</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Informations sur la propriete concernee</p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="address" class="block text-sm font-medium text-slate-700">
+            Adresse <span class="text-red-500">*</span>
+          </label>
+          <input
+            id="address"
+            name="address"
+            type="text"
+            required
+            placeholder="123 rue des Erables"
+            class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+          />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div class="space-y-1.5">
+            <label for="city" class="block text-sm font-medium text-slate-700">
+              Ville <span class="text-red-500">*</span>
+            </label>
+            <input
+              id="city"
+              name="city"
+              type="text"
+              required
+              placeholder="Montreal"
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="property_type" class="block text-sm font-medium text-slate-700">
+              Type de propriete <span class="text-red-500">*</span>
+            </label>
+            <select
+              id="property_type"
+              name="property_type"
+              required
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            >
+              <option value="">Selectionner...</option>
+              <option value="Maison">Maison</option>
+              <option value="Condo">Condo</option>
+              <option value="Duplex">Duplex</option>
+              <option value="Triplex">Triplex</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <div class="space-y-1.5">
+            <label for="bedrooms" class="block text-sm font-medium text-slate-700">Chambres</label>
+            <input
+              id="bedrooms"
+              name="bedrooms"
+              type="number"
+              min="0"
+              placeholder="3"
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="bathrooms" class="block text-sm font-medium text-slate-700">Salles de bain</label>
+            <input
+              id="bathrooms"
+              name="bathrooms"
+              type="number"
+              min="0"
+              placeholder="2"
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="listing_price" class="block text-sm font-medium text-slate-700">Prix demande ($)</label>
+            <input
+              id="listing_price"
+              name="listing_price"
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="450 000"
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-between pt-2">
+        <Button href="/broker/transactions" variant="secondary">
+          Annuler
+        </Button>
+        <Button type="submit" variant="primary" id="submit-btn">
+          <span id="submit-btn-text">Creer la transaction</span>
+          <svg id="submit-spinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+        </Button>
+      </div>
+    </form>
+  </div>
+</BrokerLayout>
+
+<script>
+  const form = document.getElementById('new-transaction-form') as HTMLFormElement;
+  const errorDiv = document.getElementById('form-error')!;
+  const errorText = document.getElementById('form-error-text')!;
+  const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
+  const submitBtnText = document.getElementById('submit-btn-text')!;
+  const submitSpinner = document.getElementById('submit-spinner')!;
+
+  function setLoading(loading: boolean) {
+    submitBtn.disabled = loading;
+    submitBtnText.textContent = loading ? 'Creation en cours...' : 'Creer la transaction';
+    submitSpinner.classList.toggle('hidden', !loading);
+  }
+
+  function showError(msg: string) {
+    errorText.textContent = msg;
+    errorDiv.classList.remove('hidden');
+    errorDiv.classList.add('flex');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorDiv.classList.add('hidden');
+    errorDiv.classList.remove('flex');
+
+    const data = {
+      title: (document.getElementById('title') as HTMLInputElement).value.trim(),
+      type: (document.getElementById('type') as HTMLSelectElement).value,
+      closing_date: (document.getElementById('closing_date') as HTMLInputElement).value || null,
+      notes: (document.getElementById('notes') as HTMLTextAreaElement).value.trim() || null,
+      address: (document.getElementById('address') as HTMLInputElement).value.trim(),
+      city: (document.getElementById('city') as HTMLInputElement).value.trim(),
+      property_type: (document.getElementById('property_type') as HTMLSelectElement).value,
+      bedrooms: (document.getElementById('bedrooms') as HTMLInputElement).value || null,
+      bathrooms: (document.getElementById('bathrooms') as HTMLInputElement).value || null,
+      listing_price: (document.getElementById('listing_price') as HTMLInputElement).value || null,
+    };
+
+    if (!data.title || !data.type || !data.address || !data.city || !data.property_type) {
+      showError('Veuillez remplir tous les champs obligatoires.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        showError(json.error ?? 'Une erreur est survenue lors de la creation.');
+        return;
+      }
+
+      window.location.href = `/broker/transactions/${json.transaction.id}`;
+    } catch {
+      showError('Erreur reseau. Veuillez verifier votre connexion et reessayer.');
+    } finally {
+      setLoading(false);
+    }
+  });
+</script>

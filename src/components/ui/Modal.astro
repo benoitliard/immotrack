@@ -1,0 +1,117 @@
+---
+interface Props {
+  id: string;
+  title: string;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+const { id, title, size = 'md' } = Astro.props;
+
+const sizeClasses: Record<string, string> = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-2xl',
+};
+---
+
+<!-- Modal backdrop + dialog -->
+<div
+  id={id}
+  class="fixed inset-0 z-50 hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby={`${id}-title`}
+>
+  <!-- Overlay -->
+  <div
+    class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"
+    data-modal-close={id}
+    aria-hidden="true"
+  ></div>
+
+  <!-- Dialog panel -->
+  <div class="fixed inset-0 flex items-center justify-center p-4 sm:p-6">
+    <div
+      class={`relative bg-white rounded-2xl shadow-xl border border-slate-200 w-full ${sizeClasses[size]} transform transition-all`}
+      role="document"
+    >
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h2 id={`${id}-title`} class="text-lg font-semibold text-slate-900">
+          {title}
+        </h2>
+        <button
+          type="button"
+          data-modal-close={id}
+          class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all duration-200"
+          aria-label="Fermer"
+        >
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="px-6 py-5">
+        <slot />
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Modal open/close logic — runs once per modal instance
+  function initModal(modalId: string): void {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+
+    // Open triggers: any element with data-modal-target="<id>"
+    document.querySelectorAll(`[data-modal-target="${modalId}"]`).forEach((trigger) => {
+      trigger.addEventListener('click', () => openModal(modalId));
+    });
+
+    // Close triggers: any element with data-modal-close="<id>" inside or outside modal
+    modal.querySelectorAll(`[data-modal-close="${modalId}"]`).forEach((trigger) => {
+      trigger.addEventListener('click', () => closeModal(modalId));
+    });
+
+    // Close on Escape
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+        closeModal(modalId);
+      }
+    });
+  }
+
+  function openModal(id: string): void {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    // Focus first focusable element
+    const focusable = modal.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    focusable?.focus();
+  }
+
+  function closeModal(id: string): void {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  // Expose globally for programmatic use
+  (window as typeof window & { openModal: typeof openModal; closeModal: typeof closeModal }).openModal = openModal;
+  (window as typeof window & { openModal: typeof openModal; closeModal: typeof closeModal }).closeModal = closeModal;
+
+  // Auto-init all modals on the page
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[role="dialog"]').forEach((el) => {
+      if (el.id) initModal(el.id);
+    });
+  });
+</script>

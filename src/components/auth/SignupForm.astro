@@ -1,0 +1,316 @@
+---
+import Input from '~/components/ui/Input.astro';
+import Button from '~/components/ui/Button.astro';
+---
+
+<form id="signup-form" class="space-y-5" novalidate>
+  <!-- Error banner -->
+  <div
+    id="signup-error"
+    class="hidden items-start gap-2.5 rounded-lg bg-red-50 border border-red-200 px-4 py-3"
+    role="alert"
+    aria-live="assertive"
+  >
+    <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <p id="signup-error-text" class="text-sm text-red-700 font-medium"></p>
+  </div>
+
+  <Input
+    label="Nom complet"
+    name="name"
+    type="text"
+    placeholder="Jean Tremblay"
+    required
+    autocomplete="name"
+    id="signup-name"
+  />
+
+  <Input
+    label="Adresse courriel"
+    name="email"
+    type="email"
+    placeholder="vous@exemple.com"
+    required
+    autocomplete="email"
+    id="signup-email"
+  />
+
+  <!-- Role selection -->
+  <fieldset class="space-y-2">
+    <legend class="block text-sm font-medium text-slate-700">
+      Je suis <span class="text-red-500" aria-hidden="true">*</span>
+    </legend>
+    <div class="grid grid-cols-2 gap-3">
+      <label
+        id="role-broker-label"
+        class="relative flex cursor-pointer rounded-xl border border-slate-200 bg-white p-3.5 focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-500 hover:bg-slate-50 transition-all duration-200"
+      >
+        <input
+          type="radio"
+          name="role"
+          value="broker"
+          id="role-broker"
+          class="sr-only"
+          required
+        />
+        <div class="flex flex-col gap-0.5">
+          <span class="text-sm font-medium text-slate-900">Courtier</span>
+          <span class="text-xs text-slate-500">Gerer des transactions</span>
+        </div>
+        <div
+          id="role-broker-check"
+          class="hidden absolute top-2.5 right-2.5 w-4 h-4 bg-violet-600 rounded-full flex items-center justify-center"
+          aria-hidden="true"
+        >
+          <svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 8 8">
+            <circle cx="4" cy="4" r="3" />
+          </svg>
+        </div>
+      </label>
+
+      <label
+        id="role-client-label"
+        class="relative flex cursor-pointer rounded-xl border border-slate-200 bg-white p-3.5 focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-500 hover:bg-slate-50 transition-all duration-200"
+      >
+        <input
+          type="radio"
+          name="role"
+          value="client"
+          id="role-client"
+          class="sr-only"
+          checked
+        />
+        <div class="flex flex-col gap-0.5">
+          <span class="text-sm font-medium text-slate-900">Client</span>
+          <span class="text-xs text-slate-500">Acheteur, vendeur ou locataire</span>
+        </div>
+        <div
+          id="role-client-check"
+          class="absolute top-2.5 right-2.5 w-4 h-4 bg-violet-600 rounded-full flex items-center justify-center"
+          aria-hidden="true"
+        >
+          <svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 8 8">
+            <circle cx="4" cy="4" r="3" />
+          </svg>
+        </div>
+      </label>
+    </div>
+  </fieldset>
+
+  <Input
+    label="Mot de passe"
+    name="password"
+    type="password"
+    placeholder="Au moins 8 caractères"
+    required
+    autocomplete="new-password"
+    id="signup-password"
+  />
+
+  <Input
+    label="Confirmer le mot de passe"
+    name="confirm_password"
+    type="password"
+    placeholder="••••••••"
+    required
+    autocomplete="new-password"
+    id="signup-confirm-password"
+  />
+
+  <!-- Password strength hint -->
+  <div id="password-hint" class="hidden">
+    <div class="flex gap-1.5 mb-1">
+      <div id="strength-bar-1" class="h-1 flex-1 rounded-full bg-gray-200 transition-colors duration-300"></div>
+      <div id="strength-bar-2" class="h-1 flex-1 rounded-full bg-gray-200 transition-colors duration-300"></div>
+      <div id="strength-bar-3" class="h-1 flex-1 rounded-full bg-gray-200 transition-colors duration-300"></div>
+      <div id="strength-bar-4" class="h-1 flex-1 rounded-full bg-gray-200 transition-colors duration-300"></div>
+    </div>
+    <p id="strength-label" class="text-xs text-gray-400"></p>
+  </div>
+
+  <Button type="submit" variant="primary" size="lg" class="w-full" id="signup-submit-btn">
+    <span id="signup-btn-text">Créer mon compte</span>
+    <svg
+      id="signup-spinner"
+      class="hidden w-4 h-4 animate-spin"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    </svg>
+  </Button>
+
+  <p class="text-center text-sm text-slate-500">
+    Deja un compte ?{' '}
+    <a href="/login" class="text-violet-600 hover:text-violet-700 font-medium transition-colors">
+      Se connecter
+    </a>
+  </p>
+</form>
+
+<script>
+  import { authClient } from '~/lib/auth-client';
+
+  // -- Role radio card styling --
+  const roleInputs = document.querySelectorAll<HTMLInputElement>('input[name="role"]');
+  roleInputs.forEach((input) => {
+    const label = input.closest('label');
+    const checkId = `role-${input.value}-check`;
+    const check = document.getElementById(checkId);
+
+    function updateStyle(): void {
+      const isSelected = input.checked;
+      label?.classList.toggle('border-violet-500', isSelected);
+      label?.classList.toggle('bg-violet-50', isSelected);
+      label?.classList.toggle('border-slate-200', !isSelected);
+      label?.classList.toggle('bg-white', !isSelected);
+      check?.classList.toggle('hidden', !isSelected);
+      check?.classList.toggle('flex', isSelected);
+    }
+
+    input.addEventListener('change', () => {
+      // Reset all, then update active
+      roleInputs.forEach((other) => {
+        const otherLabel = other.closest('label');
+        const otherCheck = document.getElementById(`role-${other.value}-check`);
+        otherLabel?.classList.remove('border-violet-500', 'bg-violet-50');
+        otherLabel?.classList.add('border-slate-200', 'bg-white');
+        otherCheck?.classList.add('hidden');
+        otherCheck?.classList.remove('flex');
+      });
+      updateStyle();
+    });
+
+    // Init state
+    updateStyle();
+  });
+
+  // -- Password strength meter --
+  const passwordInput = document.getElementById('signup-password') as HTMLInputElement | null;
+  const passwordHint = document.getElementById('password-hint');
+  const strengthBars = [1, 2, 3, 4].map((i) => document.getElementById(`strength-bar-${i}`));
+  const strengthLabel = document.getElementById('strength-label');
+
+  const STRENGTH_COLORS = ['bg-red-400', 'bg-amber-400', 'bg-yellow-400', 'bg-emerald-500'];
+  const STRENGTH_LABELS = ['Très faible', 'Faible', 'Moyen', 'Fort'];
+
+  function getStrength(password: string): number {
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+    return score;
+  }
+
+  passwordInput?.addEventListener('input', () => {
+    const val = passwordInput.value;
+    if (!val) {
+      passwordHint?.classList.add('hidden');
+      return;
+    }
+    passwordHint?.classList.remove('hidden');
+    const strength = getStrength(val);
+    const color = STRENGTH_COLORS[Math.max(strength - 1, 0)];
+
+    strengthBars.forEach((bar, idx) => {
+      if (!bar) return;
+      bar.className = `h-1 flex-1 rounded-full transition-colors duration-300 ${idx < strength ? color : 'bg-gray-200'}`;
+    });
+
+    if (strengthLabel) {
+      strengthLabel.textContent = STRENGTH_LABELS[Math.max(strength - 1, 0)];
+      strengthLabel.className = `text-xs ${strength < 2 ? 'text-red-500' : strength < 4 ? 'text-amber-500' : 'text-emerald-600'}`;
+    }
+  });
+
+  // -- Form submission --
+  const form = document.getElementById('signup-form') as HTMLFormElement | null;
+  const errorBox = document.getElementById('signup-error') as HTMLDivElement | null;
+  const errorText = document.getElementById('signup-error-text') as HTMLParagraphElement | null;
+  const submitBtn = document.getElementById('signup-submit-btn') as HTMLButtonElement | null;
+  const btnText = document.getElementById('signup-btn-text') as HTMLSpanElement | null;
+  const spinner = document.getElementById('signup-spinner') as SVGSVGElement | null;
+
+  function setLoading(loading: boolean): void {
+    if (submitBtn) submitBtn.disabled = loading;
+    if (btnText) btnText.textContent = loading ? 'Création en cours...' : 'Créer mon compte';
+    spinner?.classList.toggle('hidden', !loading);
+  }
+
+  function showError(message: string): void {
+    if (errorText) errorText.textContent = message;
+    errorBox?.classList.remove('hidden');
+    errorBox?.classList.add('flex');
+    errorBox?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function hideError(): void {
+    errorBox?.classList.add('hidden');
+    errorBox?.classList.remove('flex');
+  }
+
+  form?.addEventListener('submit', async (e: SubmitEvent) => {
+    e.preventDefault();
+    hideError();
+
+    const nameInput = document.getElementById('signup-name') as HTMLInputElement | null;
+    const emailInput = document.getElementById('signup-email') as HTMLInputElement | null;
+    const pwdInput = document.getElementById('signup-password') as HTMLInputElement | null;
+    const confirmInput = document.getElementById('signup-confirm-password') as HTMLInputElement | null;
+    const roleInput = document.querySelector<HTMLInputElement>('input[name="role"]:checked');
+
+    const name = nameInput?.value.trim() ?? '';
+    const email = emailInput?.value.trim() ?? '';
+    const password = pwdInput?.value ?? '';
+    const confirmPassword = confirmInput?.value ?? '';
+    const role = roleInput?.value ?? 'client';
+
+    if (!name || !email || !password || !confirmPassword) {
+      showError('Veuillez remplir tous les champs obligatoires.');
+      return;
+    }
+
+    if (password.length < 8) {
+      showError('Le mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      showError('Les mots de passe ne correspondent pas.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const result = await authClient.signUp.email({
+        name,
+        email,
+        password,
+        role,
+      } as Parameters<typeof authClient.signUp.email>[0]);
+
+      if (result.error) {
+        const status = result.error.status;
+        if (status === 422 || status === 409) {
+          showError('Un compte existe déjà avec cette adresse courriel.');
+        } else {
+          showError(result.error.message ?? 'Une erreur est survenue lors de la création du compte.');
+        }
+        return;
+      }
+
+      window.location.href = role === 'broker' ? '/broker/dashboard' : '/portal';
+    } catch (err) {
+      console.error('Signup error:', err);
+      showError('Une erreur réseau est survenue. Veuillez réessayer.');
+    } finally {
+      setLoading(false);
+    }
+  });
+</script>

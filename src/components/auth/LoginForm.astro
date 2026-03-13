@@ -1,0 +1,143 @@
+---
+import Input from '~/components/ui/Input.astro';
+import Button from '~/components/ui/Button.astro';
+---
+
+<form id="login-form" class="space-y-5" novalidate>
+  <!-- General error banner -->
+  <div
+    id="login-error"
+    class="hidden items-start gap-2.5 rounded-lg bg-red-50 border border-red-200 px-4 py-3"
+    role="alert"
+    aria-live="assertive"
+  >
+    <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <p id="login-error-text" class="text-sm text-red-700 font-medium"></p>
+  </div>
+
+  <Input
+    label="Adresse courriel"
+    name="email"
+    type="email"
+    placeholder="vous@exemple.com"
+    required
+    autocomplete="email"
+    id="login-email"
+  />
+
+  <div class="space-y-1.5">
+    <Input
+      label="Mot de passe"
+      name="password"
+      type="password"
+      placeholder="••••••••"
+      required
+      autocomplete="current-password"
+      id="login-password"
+    />
+    <div class="flex justify-end">
+      <a
+        href="/forgot-password"
+        class="text-sm text-violet-600 hover:text-violet-700 font-medium transition-colors"
+      >
+        Mot de passe oublie ?
+      </a>
+    </div>
+  </div>
+
+  <Button type="submit" variant="primary" size="lg" class="w-full" id="login-submit-btn">
+    <span id="login-btn-text">Se connecter</span>
+    <svg
+      id="login-spinner"
+      class="hidden w-4 h-4 animate-spin"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    </svg>
+  </Button>
+
+  <p class="text-center text-sm text-slate-500">
+    Pas encore de compte ?{' '}
+    <a href="/signup" class="text-violet-600 hover:text-violet-700 font-medium transition-colors">
+      S'inscrire
+    </a>
+  </p>
+</form>
+
+<script>
+  import { authClient } from '~/lib/auth-client';
+
+  const form = document.getElementById('login-form') as HTMLFormElement | null;
+  const errorBox = document.getElementById('login-error') as HTMLDivElement | null;
+  const errorText = document.getElementById('login-error-text') as HTMLParagraphElement | null;
+  const submitBtn = document.getElementById('login-submit-btn') as HTMLButtonElement | null;
+  const btnText = document.getElementById('login-btn-text') as HTMLSpanElement | null;
+  const spinner = document.getElementById('login-spinner') as SVGSVGElement | null;
+
+  function setLoading(loading: boolean): void {
+    if (submitBtn) submitBtn.disabled = loading;
+    if (btnText) btnText.textContent = loading ? 'Connexion en cours...' : 'Se connecter';
+    spinner?.classList.toggle('hidden', !loading);
+  }
+
+  function showError(message: string): void {
+    if (errorText) errorText.textContent = message;
+    errorBox?.classList.remove('hidden');
+    errorBox?.classList.add('flex');
+  }
+
+  function hideError(): void {
+    errorBox?.classList.add('hidden');
+    errorBox?.classList.remove('flex');
+  }
+
+  form?.addEventListener('submit', async (e: SubmitEvent) => {
+    e.preventDefault();
+    hideError();
+
+    const emailInput = document.getElementById('login-email') as HTMLInputElement | null;
+    const passwordInput = document.getElementById('login-password') as HTMLInputElement | null;
+    const email = emailInput?.value.trim() ?? '';
+    const password = passwordInput?.value ?? '';
+
+    if (!email || !password) {
+      showError('Veuillez remplir tous les champs.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const result = await authClient.signIn.email({ email, password });
+
+      if (result.error) {
+        const code = result.error.code;
+        showError(
+          code === 'INVALID_EMAIL_OR_PASSWORD'
+            ? 'Courriel ou mot de passe incorrect.'
+            : (result.error.message ?? 'Une erreur est survenue. Veuillez réessayer.')
+        );
+        return;
+      }
+
+      const user = result.data?.user as { role?: string } | undefined;
+      const role = user?.role;
+
+      if (role === 'broker' || role === 'admin') {
+        window.location.href = '/broker/dashboard';
+      } else {
+        window.location.href = '/portal';
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      showError('Une erreur réseau est survenue. Veuillez réessayer.');
+    } finally {
+      setLoading(false);
+    }
+  });
+</script>

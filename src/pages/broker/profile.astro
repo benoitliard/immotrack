@@ -1,0 +1,169 @@
+---
+import BrokerLayout from '~/layouts/BrokerLayout.astro';
+import Button from '~/components/ui/Button.astro';
+import { db } from '~/lib/db';
+import { brokerProfiles } from '~/db/schema';
+import { eq } from 'drizzle-orm';
+
+const user = Astro.locals.user!;
+
+// Fetch existing broker profile
+const [initialProfile] = await db
+  .select()
+  .from(brokerProfiles)
+  .where(eq(brokerProfiles.userId, user.id));
+
+let profile = initialProfile ?? null;
+let successMessage: string | null = null;
+let errorMessage: string | null = null;
+
+// Handle form POST
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const licenseNumber = (formData.get('license_number') as string ?? '').trim();
+  const agency = (formData.get('agency') as string ?? '').trim();
+  const phone = (formData.get('phone') as string ?? '').trim();
+  const bio = (formData.get('bio') as string ?? '').trim();
+
+  if (!licenseNumber) {
+    errorMessage = 'Le numero de permis est obligatoire.';
+  } else {
+    try {
+      if (profile) {
+        await db
+          .update(brokerProfiles)
+          .set({ licenseNumber, agency: agency || null, phone: phone || null, bio: bio || null, updatedAt: new Date() })
+          .where(eq(brokerProfiles.userId, user.id));
+      } else {
+        await db.insert(brokerProfiles).values({
+          userId: user.id,
+          licenseNumber,
+          agency: agency || null,
+          phone: phone || null,
+          bio: bio || null,
+        });
+      }
+      successMessage = 'Profil mis a jour avec succes.';
+      // Re-fetch fresh data
+      const [updated] = await db.select().from(brokerProfiles).where(eq(brokerProfiles.userId, user.id));
+      profile = updated ?? null;
+    } catch {
+      errorMessage = 'Une erreur est survenue lors de la sauvegarde.';
+    }
+  }
+}
+---
+
+<BrokerLayout title="Mon profil">
+  <div class="max-w-2xl">
+    <div class="mb-8">
+      <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Mon profil</h1>
+      <p class="text-slate-500 mt-1">Gerez vos informations professionnelles de courtier.</p>
+    </div>
+
+    {successMessage && (
+      <div class="mb-6 flex items-center gap-2.5 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
+        <svg class="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-sm text-emerald-700 font-medium">{successMessage}</p>
+      </div>
+    )}
+
+    {errorMessage && (
+      <div class="mb-6 flex items-center gap-2.5 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-sm text-red-700 font-medium">{errorMessage}</p>
+      </div>
+    )}
+
+    <!-- Account info (read-only) -->
+    <div class="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+      <h2 class="font-semibold text-slate-900 mb-4">Compte</h2>
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 bg-violet-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <span class="text-xl font-bold text-violet-700">
+            {user.name?.charAt(0).toUpperCase() ?? 'C'}
+          </span>
+        </div>
+        <div>
+          <p class="font-medium text-slate-900">{user.name}</p>
+          <p class="text-sm text-slate-500">{user.email}</p>
+          <span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/20">
+            Courtier
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile form -->
+    <form method="POST" class="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="font-semibold text-slate-900">Informations professionnelles</h2>
+        {!profile && (
+          <span class="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded-full ring-1 ring-inset ring-amber-600/20">Profil incomplet</span>
+        )}
+      </div>
+
+      <div class="space-y-1.5">
+        <label for="license_number" class="block text-sm font-medium text-slate-700">
+          Numero de permis OACIQ <span class="text-red-500">*</span>
+        </label>
+        <input
+          id="license_number"
+          name="license_number"
+          type="text"
+          required
+          placeholder="Ex : 123456"
+          value={profile?.licenseNumber ?? ''}
+          class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+        />
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div class="space-y-1.5">
+          <label for="agency" class="block text-sm font-medium text-slate-700">Agence immobiliere</label>
+          <input
+            id="agency"
+            name="agency"
+            type="text"
+            placeholder="Re/Max, Royal LePage..."
+            value={profile?.agency ?? ''}
+            class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="phone" class="block text-sm font-medium text-slate-700">Telephone</label>
+          <input
+            id="phone"
+            name="phone"
+            type="tel"
+            placeholder="514 555-1234"
+            value={profile?.phone ?? ''}
+            class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150"
+          />
+        </div>
+      </div>
+
+      <div class="space-y-1.5">
+        <label for="bio" class="block text-sm font-medium text-slate-700">Bio / Presentation</label>
+        <textarea
+          id="bio"
+          name="bio"
+          rows="4"
+          placeholder="Decrivez votre experience, vos specialites..."
+          class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all duration-150 resize-none"
+        >{profile?.bio ?? ''}</textarea>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <Button type="submit" variant="primary">
+          Enregistrer les modifications
+        </Button>
+      </div>
+    </form>
+  </div>
+</BrokerLayout>

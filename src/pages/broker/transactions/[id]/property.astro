@@ -1,0 +1,737 @@
+---
+import BrokerLayout from '~/layouts/BrokerLayout.astro';
+import Badge from '~/components/ui/Badge.astro';
+import { db } from '~/lib/db';
+import { transactions, properties, propertyPhotos } from '~/db/schema';
+import { eq, and, asc } from 'drizzle-orm';
+
+const { id } = Astro.params;
+const currentUser = Astro.locals.user!;
+
+// Fetch transaction + verify ownership
+const [tx] = await db
+  .select()
+  .from(transactions)
+  .where(and(eq(transactions.id, id!), eq(transactions.brokerId, currentUser.id)));
+
+if (!tx) {
+  return Astro.redirect('/broker/transactions');
+}
+
+if (!tx.propertyId) {
+  return Astro.redirect(`/broker/transactions/${id}`);
+}
+
+// Fetch property + photos in parallel
+const [property, photos] = await Promise.all([
+  db.select().from(properties).where(eq(properties.id, tx.propertyId)).then(r => r[0] ?? null),
+  db.select().from(propertyPhotos).where(eq(propertyPhotos.propertyId, tx.propertyId)).orderBy(asc(propertyPhotos.orderIndex)),
+]);
+
+if (!property) {
+  return Astro.redirect(`/broker/transactions/${id}`);
+}
+
+// Format helpers
+function formatPrice(cents: number | null | undefined): string {
+  if (!cents && cents !== 0) return '--';
+  return new Intl.NumberFormat('fr-CA', { style: 'decimal', maximumFractionDigits: 0 }).format(cents).replace(/,/g, ' ') + ' $';
+}
+
+function formatTax(cents: number | null | undefined): string {
+  if (!cents && cents !== 0) return '--';
+  return new Intl.NumberFormat('fr-CA', { style: 'decimal', maximumFractionDigits: 2 }).format(cents / 100).replace(/,/g, ' ') + ' $';
+}
+
+function formatArea(sqft: number | null | undefined): string {
+  if (!sqft) return '--';
+  return new Intl.NumberFormat('fr-CA').format(sqft) + ' pi\u00B2';
+}
+
+const coverPhoto = photos.find(p => p.isCover) ?? photos[0] ?? null;
+
+// Parse features JSON safely
+let featuresList: string[] = [];
+try {
+  if (property.features) {
+    featuresList = JSON.parse(property.features);
+  }
+} catch { /* ignore parse errors */ }
+
+// Estimate monthly cost
+const monthlyMunicipal = property.municipalTax ? (property.municipalTax / 100 / 12) : 0;
+const monthlySchool = property.schoolTax ? (property.schoolTax / 100 / 12) : 0;
+const monthlyCondo = property.condoFees ? (property.condoFees / 100) : 0;
+const totalMonthly = monthlyMunicipal + monthlySchool + monthlyCondo;
+
+const propertyTypeLabels: Record<string, string> = {
+  condo: 'Copropriete',
+  house: 'Maison unifamiliale',
+  duplex: 'Duplex',
+  triplex: 'Triplex',
+  multiplex: 'Multiplex',
+  land: 'Terrain',
+  commercial: 'Commercial',
+  cottage: 'Chalet',
+};
+---
+
+<BrokerLayout title={`${property.address} - Fiche propriete`}>
+  <!-- Breadcrumb -->
+  <div class="flex items-center gap-2 text-sm text-slate-500 mb-6">
+    <a href="/broker/transactions" class="hover:text-slate-700 transition-colors">Transactions</a>
+    <svg class="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+    <a href={`/broker/transactions/${id}`} class="hover:text-slate-700 transition-colors truncate max-w-[160px]">{tx.title}</a>
+    <svg class="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+    <span class="text-slate-900 font-medium">Fiche propriete</span>
+  </div>
+
+  <!-- Actions bar -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+    <h1 class="text-xl font-semibold tracking-tight text-slate-900">Fiche de la propriete</h1>
+    <div class="flex items-center gap-2">
+      <button
+        id="upload-trigger-btn"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 active:scale-[0.98] transition-all duration-200 shadow-sm"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Ajouter des photos
+      </button>
+      <a
+        href={`/broker/transactions/${id}`}
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 active:scale-[0.98] transition-all duration-200 shadow-sm"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Retour a la transaction
+      </a>
+    </div>
+  </div>
+
+  <!-- Centris Import -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+        <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900">Importer depuis Centris</h3>
+        <p class="text-xs text-slate-500">Collez l'URL ou le code MLS d'une fiche Centris</p>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <input
+        id="centris-input"
+        type="text"
+        placeholder="URL Centris ou numero MLS (ex: 28574629)"
+        class="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+      />
+      <button
+        id="centris-fetch-btn"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 active:scale-[0.98] transition-all duration-200 shadow-sm whitespace-nowrap"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Importer
+      </button>
+    </div>
+    <div id="centris-status" class="hidden mt-3 text-sm"></div>
+  </div>
+
+  <!-- Photo Gallery -->
+  <div class="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6" id="photo-gallery-section">
+    {photos.length > 0 ? (
+      <div>
+        <!-- Main photo -->
+        <div class="relative">
+          <img
+            id="main-photo"
+            src={`/api/files/${coverPhoto!.url}`}
+            alt={coverPhoto!.caption ?? 'Photo de la propriete'}
+            class="w-full max-h-[500px] object-cover"
+          />
+          <div class="absolute top-3 right-3 flex items-center gap-2">
+            <span class="bg-black/60 text-white text-xs font-medium px-2.5 py-1 rounded-lg backdrop-blur-sm">
+              {photos.length} photo{photos.length > 1 ? 's' : ''}
+            </span>
+          </div>
+        </div>
+        <!-- Thumbnails -->
+        {photos.length > 1 && (
+          <div class="p-3 border-t border-slate-100 overflow-x-auto">
+            <div class="flex gap-2" id="thumbnail-strip">
+              {photos.map((photo, idx) => (
+                <button
+                  class={`flex-shrink-0 w-20 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 hover:opacity-90 thumbnail-btn ${idx === 0 ? 'border-violet-500 ring-2 ring-violet-200' : 'border-transparent opacity-70 hover:border-slate-300'}`}
+                  data-url={`/api/files/${photo.url}`}
+                  data-caption={photo.caption ?? 'Photo de la propriete'}
+                  data-index={idx}
+                >
+                  <img
+                    src={`/api/files/${photo.url}`}
+                    alt={photo.caption ?? `Photo ${idx + 1}`}
+                    class="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    ) : (
+      <div class="py-16 text-center">
+        <svg class="w-16 h-16 text-slate-200 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <p class="text-slate-500 font-medium mb-1">Aucune photo disponible</p>
+        <p class="text-sm text-slate-400 mb-4">Ajoutez des photos pour mettre en valeur cette propriete</p>
+        <button
+          id="upload-trigger-btn-empty"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 active:scale-[0.98] transition-all duration-200 shadow-sm"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Ajouter des photos
+        </button>
+      </div>
+    )}
+  </div>
+
+  <!-- Upload zone (hidden by default) -->
+  <div id="upload-zone" class="hidden mb-6">
+    <div class="bg-white rounded-xl border-2 border-dashed border-violet-300 p-8 text-center transition-colors duration-200" id="drop-area">
+      <svg class="w-12 h-12 text-violet-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+      </svg>
+      <p class="text-sm font-medium text-slate-700 mb-1">Glissez vos photos ici ou cliquez pour parcourir</p>
+      <p class="text-xs text-slate-400 mb-4">JPEG, PNG ou WebP -- Max 10 Mo par photo</p>
+      <input
+        type="file"
+        id="file-input"
+        class="hidden"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+      />
+      <button
+        id="browse-btn"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all duration-200"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+        Parcourir les fichiers
+      </button>
+      <!-- Upload progress -->
+      <div id="upload-progress" class="hidden mt-4 space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- Property header -->
+  <div class="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+      <div>
+        <h2 class="text-2xl font-semibold text-slate-900 mb-1">{property.address}</h2>
+        <p class="text-slate-500">
+          {property.city}, {property.province}
+          {property.postalCode ? ` ${property.postalCode}` : ''}
+        </p>
+        <div class="flex flex-wrap items-center gap-2 mt-3">
+          <Badge variant="info">{propertyTypeLabels[property.propertyType] ?? property.propertyType}</Badge>
+          {property.mlsNumber && (
+            <a
+              href={`https://www.centris.ca/fr/propriete~a-vendre~/${property.mlsNumber}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition-colors duration-150 border border-blue-100"
+              title="Voir la fiche Centris"
+            >
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              MLS {property.mlsNumber}
+            </a>
+          )}
+        </div>
+      </div>
+      {property.listingPrice && (
+        <div class="text-right flex-shrink-0">
+          <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-1">Prix demande</p>
+          <p class="text-3xl font-bold text-slate-900">{formatPrice(property.listingPrice)}</p>
+        </div>
+      )}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left column -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Specs grid -->
+      <div class="bg-white rounded-xl border border-slate-200 p-6">
+        <h3 class="font-semibold text-slate-900 mb-5">Caracteristiques principales</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <!-- Chambres -->
+          {property.bedrooms != null && (
+            <div class="bg-slate-50 rounded-xl p-4 text-center">
+              <div class="w-9 h-9 bg-violet-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <svg class="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+              </div>
+              <p class="text-2xl font-bold text-slate-900">{property.bedrooms}</p>
+              <p class="text-xs text-slate-500 mt-0.5">Chambres</p>
+            </div>
+          )}
+          <!-- Salles de bain -->
+          {property.bathrooms != null && (
+            <div class="bg-slate-50 rounded-xl p-4 text-center">
+              <div class="w-9 h-9 bg-violet-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <svg class="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M4 16H2m2 0h16m2 0h-2M4 16V8a4 4 0 014-4h1" />
+                  <circle cx="9" cy="10" r="1" fill="currentColor" />
+                </svg>
+              </div>
+              <p class="text-2xl font-bold text-slate-900">{property.bathrooms}</p>
+              <p class="text-xs text-slate-500 mt-0.5">Salles de bain</p>
+            </div>
+          )}
+          <!-- Superficie habitable -->
+          {property.livingArea && (
+            <div class="bg-slate-50 rounded-xl p-4 text-center">
+              <div class="w-9 h-9 bg-violet-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <svg class="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              </div>
+              <p class="text-2xl font-bold text-slate-900">{formatArea(property.livingArea)}</p>
+              <p class="text-xs text-slate-500 mt-0.5">Superficie habitable</p>
+            </div>
+          )}
+          <!-- Superficie terrain -->
+          {property.lotArea && (
+            <div class="bg-slate-50 rounded-xl p-4 text-center">
+              <div class="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p class="text-2xl font-bold text-slate-900">{formatArea(property.lotArea)}</p>
+              <p class="text-xs text-slate-500 mt-0.5">Superficie terrain</p>
+            </div>
+          )}
+          <!-- Annee de construction -->
+          {property.yearBuilt && (
+            <div class="bg-slate-50 rounded-xl p-4 text-center">
+              <div class="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <p class="text-2xl font-bold text-slate-900">{property.yearBuilt}</p>
+              <p class="text-xs text-slate-500 mt-0.5">Annee de construction</p>
+            </div>
+          )}
+          <!-- Etages -->
+          {property.floors && (
+            <div class="bg-slate-50 rounded-xl p-4 text-center">
+              <div class="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <p class="text-2xl font-bold text-slate-900">{property.floors}</p>
+              <p class="text-xs text-slate-500 mt-0.5">Etages</p>
+            </div>
+          )}
+          <!-- Stationnement -->
+          {property.parking && (
+            <div class="bg-slate-50 rounded-xl p-4 text-center">
+              <div class="w-9 h-9 bg-slate-200 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <svg class="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+                </svg>
+              </div>
+              <p class="text-sm font-bold text-slate-900 leading-tight">{property.parking}</p>
+              <p class="text-xs text-slate-500 mt-0.5">Stationnement</p>
+            </div>
+          )}
+          <!-- Chauffage -->
+          {property.heating && (
+            <div class="bg-slate-50 rounded-xl p-4 text-center">
+              <div class="w-9 h-9 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <svg class="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+                </svg>
+              </div>
+              <p class="text-sm font-bold text-slate-900 leading-tight">{property.heating}</p>
+              <p class="text-xs text-slate-500 mt-0.5">Chauffage</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="bg-white rounded-xl border border-slate-200 p-6">
+        <h3 class="font-semibold text-slate-900 mb-4">Description</h3>
+        {property.descriptionLong ? (
+          <div class="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{property.descriptionLong}</div>
+        ) : property.description ? (
+          <div class="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{property.description}</div>
+        ) : (
+          <div class="text-center py-8">
+            <svg class="w-10 h-10 text-slate-200 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16m-7 6h7" />
+            </svg>
+            <p class="text-sm text-slate-400 mb-1">Aucune description</p>
+            <p class="text-xs text-slate-400">Ajoutez une description pour mettre en valeur cette propriete.</p>
+          </div>
+        )}
+      </div>
+
+      <!-- Caracteristiques (features) -->
+      {featuresList.length > 0 && (
+        <div class="bg-white rounded-xl border border-slate-200 p-6">
+          <h3 class="font-semibold text-slate-900 mb-4">Caracteristiques</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {featuresList.map((feature: string) => (
+              <div class="flex items-center gap-2.5 py-1.5">
+                <svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span class="text-sm text-slate-700">{feature}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+
+    <!-- Right column -->
+    <div class="space-y-6">
+      <!-- Financial info card -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5">
+        <h3 class="font-semibold text-slate-900 text-sm mb-4">Informations financieres</h3>
+        <div class="space-y-3">
+          {property.listingPrice && (
+            <div class="flex items-center justify-between py-2 border-b border-slate-100">
+              <span class="text-sm text-slate-500">Prix demande</span>
+              <span class="text-sm font-semibold text-slate-900">{formatPrice(property.listingPrice)}</span>
+            </div>
+          )}
+          {property.municipalTax && (
+            <div class="flex items-center justify-between py-2 border-b border-slate-100">
+              <span class="text-sm text-slate-500">Taxes municipales</span>
+              <span class="text-sm font-medium text-slate-700">{formatTax(property.municipalTax)} / an</span>
+            </div>
+          )}
+          {property.schoolTax && (
+            <div class="flex items-center justify-between py-2 border-b border-slate-100">
+              <span class="text-sm text-slate-500">Taxes scolaires</span>
+              <span class="text-sm font-medium text-slate-700">{formatTax(property.schoolTax)} / an</span>
+            </div>
+          )}
+          {property.condoFees && (
+            <div class="flex items-center justify-between py-2 border-b border-slate-100">
+              <span class="text-sm text-slate-500">Frais de condo</span>
+              <span class="text-sm font-medium text-slate-700">{formatTax(property.condoFees)} / mois</span>
+            </div>
+          )}
+          {totalMonthly > 0 && (
+            <div class="flex items-center justify-between pt-2 mt-1">
+              <span class="text-sm font-semibold text-slate-700">Total estime mensuel</span>
+              <span class="text-sm font-bold text-violet-600">
+                {new Intl.NumberFormat('fr-CA', { style: 'decimal', maximumFractionDigits: 0 }).format(totalMonthly)} $ / mois
+              </span>
+            </div>
+          )}
+          {!property.listingPrice && !property.municipalTax && !property.schoolTax && !property.condoFees && (
+            <p class="text-xs text-slate-400 italic py-2">Aucune information financiere disponible.</p>
+          )}
+        </div>
+      </div>
+
+      <!-- Additional details -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5">
+        <h3 class="font-semibold text-slate-900 text-sm mb-4">Details complementaires</h3>
+        <div class="space-y-3">
+          {property.zoning && (
+            <div>
+              <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-0.5">Zonage</p>
+              <p class="text-sm text-slate-900">{property.zoning}</p>
+            </div>
+          )}
+          {property.lot && (
+            <div>
+              <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-0.5">Numero de lot</p>
+              <p class="text-sm text-slate-900">{property.lot}</p>
+            </div>
+          )}
+          {property.waterHeater && (
+            <div>
+              <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-0.5">Chauffe-eau</p>
+              <p class="text-sm text-slate-900">{property.waterHeater}</p>
+            </div>
+          )}
+          {property.virtualTourUrl && (
+            <div>
+              <p class="text-xs text-slate-400 uppercase tracking-wider font-medium mb-0.5">Visite virtuelle</p>
+              <a href={property.virtualTourUrl} target="_blank" rel="noopener noreferrer" class="text-sm text-violet-600 hover:text-violet-700 underline">
+                Voir la visite virtuelle
+              </a>
+            </div>
+          )}
+          {!property.zoning && !property.lot && !property.waterHeater && !property.virtualTourUrl && (
+            <p class="text-xs text-slate-400 italic">Aucun detail complementaire.</p>
+          )}
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5">
+        <h3 class="font-semibold text-slate-900 text-sm mb-4">Actions</h3>
+        <div class="space-y-1">
+          <a
+            href={`/broker/transactions/${id}`}
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-all duration-200 w-full text-left"
+          >
+            <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Voir la transaction
+          </a>
+          <a
+            href={`/broker/transactions/${id}/documents`}
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-all duration-200 w-full text-left"
+          >
+            <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            Documents
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</BrokerLayout>
+
+<script define:vars={{ propertyId: property.id }}>
+  // --- Thumbnail gallery interaction ---
+  const mainPhoto = document.getElementById('main-photo');
+  const thumbnails = document.querySelectorAll('.thumbnail-btn');
+
+  thumbnails.forEach((thumb) => {
+    thumb.addEventListener('click', () => {
+      const url = thumb.getAttribute('data-url');
+      const caption = thumb.getAttribute('data-caption');
+
+      if (mainPhoto && url) {
+        mainPhoto.setAttribute('src', url);
+        mainPhoto.setAttribute('alt', caption || 'Photo de la propriete');
+      }
+
+      // Update active thumbnail
+      thumbnails.forEach((t) => {
+        t.classList.remove('border-violet-500', 'ring-2', 'ring-violet-200');
+        t.classList.add('border-transparent', 'opacity-70');
+      });
+      thumb.classList.add('border-violet-500', 'ring-2', 'ring-violet-200');
+      thumb.classList.remove('border-transparent', 'opacity-70');
+    });
+  });
+
+  // --- Upload zone toggle ---
+  const uploadZone = document.getElementById('upload-zone');
+  const uploadTriggerBtn = document.getElementById('upload-trigger-btn');
+  const uploadTriggerBtnEmpty = document.getElementById('upload-trigger-btn-empty');
+  const browseBtn = document.getElementById('browse-btn');
+  const fileInput = document.getElementById('file-input');
+  const dropArea = document.getElementById('drop-area');
+  const progressContainer = document.getElementById('upload-progress');
+
+  function showUploadZone() {
+    if (uploadZone) {
+      uploadZone.classList.remove('hidden');
+      uploadZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  uploadTriggerBtn?.addEventListener('click', showUploadZone);
+  uploadTriggerBtnEmpty?.addEventListener('click', showUploadZone);
+  browseBtn?.addEventListener('click', () => fileInput?.click());
+
+  // Drag and drop
+  if (dropArea) {
+    ['dragenter', 'dragover'].forEach((evtName) => {
+      dropArea.addEventListener(evtName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropArea.classList.add('border-violet-500', 'bg-violet-50');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach((evtName) => {
+      dropArea.addEventListener(evtName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropArea.classList.remove('border-violet-500', 'bg-violet-50');
+      });
+    });
+
+    dropArea.addEventListener('drop', (e) => {
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        uploadFiles(Array.from(files));
+      }
+    });
+  }
+
+  // File input change
+  fileInput?.addEventListener('change', () => {
+    const files = fileInput.files;
+    if (files && files.length > 0) {
+      uploadFiles(Array.from(files));
+    }
+  });
+
+  async function uploadFiles(files) {
+    if (!progressContainer) return;
+    progressContainer.classList.remove('hidden');
+    progressContainer.innerHTML = '';
+
+    for (const file of files) {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'flex items-center gap-3 p-3 bg-slate-50 rounded-lg';
+      itemEl.innerHTML = `
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-slate-700 truncate">${file.name}</p>
+          <div class="w-full bg-slate-200 rounded-full h-1.5 mt-1.5">
+            <div class="bg-violet-500 h-1.5 rounded-full transition-all duration-500 upload-bar" style="width: 0%"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-1 upload-status">Envoi en cours...</p>
+        </div>
+      `;
+      progressContainer.appendChild(itemEl);
+
+      const bar = itemEl.querySelector('.upload-bar');
+      const statusEl = itemEl.querySelector('.upload-status');
+
+      try {
+        // Simulate progress start
+        if (bar) bar.style.width = '30%';
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch(`/api/properties/${propertyId}/photos`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (res.ok) {
+          if (bar) bar.style.width = '100%';
+          if (statusEl) {
+            statusEl.textContent = 'Envoye avec succes';
+            statusEl.classList.add('text-emerald-600');
+            statusEl.classList.remove('text-slate-400');
+          }
+        } else {
+          const data = await res.json();
+          if (bar) {
+            bar.style.width = '100%';
+            bar.classList.remove('bg-violet-500');
+            bar.classList.add('bg-red-400');
+          }
+          if (statusEl) {
+            statusEl.textContent = data.error || 'Erreur lors de l\'envoi';
+            statusEl.classList.add('text-red-600');
+            statusEl.classList.remove('text-slate-400');
+          }
+        }
+      } catch {
+        if (bar) {
+          bar.style.width = '100%';
+          bar.classList.remove('bg-violet-500');
+          bar.classList.add('bg-red-400');
+        }
+        if (statusEl) {
+          statusEl.textContent = 'Erreur reseau';
+          statusEl.classList.add('text-red-600');
+          statusEl.classList.remove('text-slate-400');
+        }
+      }
+    }
+
+    // Reload after all uploads complete (slight delay for user feedback)
+    setTimeout(() => {
+      window.location.reload();
+    }, 1200);
+  }
+
+  // --- Centris import ---
+  const centrisInput = document.getElementById('centris-input');
+  const centrisFetchBtn = document.getElementById('centris-fetch-btn');
+  const centrisStatus = document.getElementById('centris-status');
+
+  const IMPORT_ICON = `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+  </svg>`;
+
+  const SPINNER_ICON = `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+  </svg>`;
+
+  centrisFetchBtn?.addEventListener('click', async () => {
+    const value = centrisInput?.value?.trim();
+    if (!value) return;
+
+    centrisFetchBtn.disabled = true;
+    centrisFetchBtn.innerHTML = `${SPINNER_ICON} Importation...`;
+    centrisStatus.classList.remove('hidden');
+    centrisStatus.innerHTML = '<p class="text-slate-500">Recuperation des donnees depuis Centris...</p>';
+
+    try {
+      const isUrl = value.startsWith('http');
+      const body = isUrl ? { url: value } : { mlsNumber: value };
+
+      const res = await fetch(`/api/properties/${propertyId}/fetch-centris`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        centrisStatus.innerHTML = `<p class="text-emerald-600 font-medium">Donnees importees avec succes &mdash; ${data.fieldsUpdated || 0} champ${(data.fieldsUpdated || 0) !== 1 ? 's' : ''} mis a jour</p>`;
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        centrisStatus.innerHTML = `<p class="text-red-600">${data.error || "Erreur lors de l'importation"}</p>`;
+      }
+    } catch {
+      centrisStatus.innerHTML = '<p class="text-red-600">Erreur reseau</p>';
+    } finally {
+      centrisFetchBtn.disabled = false;
+      centrisFetchBtn.innerHTML = `${IMPORT_ICON} Importer`;
+    }
+  });
+
+  // Allow pressing Enter in the input to trigger import
+  centrisInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      centrisFetchBtn?.click();
+    }
+  });
+</script>

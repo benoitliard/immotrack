@@ -1,0 +1,129 @@
+---
+import BrokerLayout from '~/layouts/BrokerLayout.astro';
+import Button from '~/components/ui/Button.astro';
+import Badge from '~/components/ui/Badge.astro';
+import { db } from '~/lib/db';
+import { transactions, properties } from '~/db/schema';
+import { eq, desc } from 'drizzle-orm';
+import { typeLabels, typeBadgeVariant, statusLabels, statusBadgeVariant, formatDate } from '~/lib/labels';
+
+const user = Astro.locals.user!;
+
+// Fetch broker's transactions with property info
+const brokerTransactions = await db
+  .select({
+    id: transactions.id,
+    title: transactions.title,
+    type: transactions.type,
+    status: transactions.status,
+    currentStageOrder: transactions.currentStageOrder,
+    closingDate: transactions.closingDate,
+    createdAt: transactions.createdAt,
+    propertyAddress: properties.address,
+    propertyCity: properties.city,
+  })
+  .from(transactions)
+  .leftJoin(properties, eq(transactions.propertyId, properties.id))
+  .where(eq(transactions.brokerId, user.id))
+  .orderBy(desc(transactions.createdAt));
+
+---
+
+<BrokerLayout title="Mes transactions">
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Mes transactions</h1>
+      <p class="text-slate-500 mt-1">
+        {brokerTransactions.length === 0
+          ? 'Aucune transaction'
+          : `${brokerTransactions.length} transaction${brokerTransactions.length > 1 ? 's' : ''}`}
+      </p>
+    </div>
+    <Button href="/broker/transactions/new" variant="primary">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+      </svg>
+      Nouvelle transaction
+    </Button>
+  </div>
+
+  {brokerTransactions.length === 0 ? (
+    <!-- Empty state -->
+    <div class="bg-white rounded-xl border border-slate-200">
+      <div class="flex flex-col items-center justify-center py-20 px-8 text-center">
+        <div class="w-14 h-14 bg-slate-50 rounded-xl flex items-center justify-center mb-5 ring-1 ring-inset ring-slate-200">
+          <svg class="w-7 h-7 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <h2 class="text-lg font-semibold text-slate-900 mb-2">Aucune transaction</h2>
+        <p class="text-slate-500 text-sm max-w-sm mb-6">
+          Creez votre premiere transaction pour commencer a suivre son avancement avec vos clients.
+        </p>
+        <Button href="/broker/transactions/new" variant="primary">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Creer une transaction
+        </Button>
+      </div>
+    </div>
+  ) : (
+    <!-- Transactions list -->
+    <div class="space-y-3">
+      {brokerTransactions.map((tx) => (
+        <a
+          href={`/broker/transactions/${tx.id}`}
+          class="block bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-all duration-200 group"
+        >
+          <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-start gap-4">
+              <!-- Type icon -->
+              <div class="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0 ring-1 ring-inset ring-slate-200 group-hover:ring-slate-300 transition-all duration-200">
+                <svg class="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2 mb-1">
+                  <h3 class="font-semibold text-slate-900 text-sm group-hover:text-violet-700 transition-colors truncate">
+                    {tx.title}
+                  </h3>
+                  <Badge variant={typeBadgeVariant[tx.type] ?? 'neutral'} size="sm">
+                    {typeLabels[tx.type] ?? tx.type}
+                  </Badge>
+                  <Badge variant={statusBadgeVariant[tx.status ?? 'active'] ?? 'neutral'} size="sm">
+                    {statusLabels[tx.status ?? 'active'] ?? tx.status}
+                  </Badge>
+                </div>
+                {(tx.propertyAddress || tx.propertyCity) && (
+                  <p class="text-xs text-slate-500 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {[tx.propertyAddress, tx.propertyCity].filter(Boolean).join(', ')}
+                  </p>
+                )}
+                <p class="text-xs text-slate-400 mt-1">Etape {tx.currentStageOrder ?? 1} · Creee le {formatDate(tx.createdAt)}</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3 sm:flex-shrink-0">
+              {tx.closingDate && (
+                <div class="text-right">
+                  <p class="text-xs text-slate-400">Cloture prevue</p>
+                  <p class="text-xs font-medium text-slate-700">{formatDate(tx.closingDate)}</p>
+                </div>
+              )}
+              <svg class="w-4 h-4 text-slate-300 group-hover:text-violet-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+        </a>
+      ))}
+    </div>
+  )}
+</BrokerLayout>
