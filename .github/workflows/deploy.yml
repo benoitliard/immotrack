@@ -49,18 +49,20 @@ jobs:
             echo "==> Redémarrage des services"
             docker compose -f docker/docker-compose.yml up -d --force-recreate
 
-            echo "==> Attente que la base de données soit prête"
-            sleep 5
+            echo "==> Attente que l'application soit prête"
+            for i in $(seq 1 30); do
+              if curl --fail --silent --max-time 5 http://localhost > /dev/null 2>&1; then
+                echo "Application en ligne après ${i}s"
+                break
+              fi
+              [ "$i" -eq 30 ] && echo "ERREUR: L'application ne répond pas après 30s" && exit 1
+              sleep 1
+            done
 
             echo "==> Application des migrations de base de données"
             docker compose -f docker/docker-compose.yml exec -T app \
-              npx drizzle-kit push --force || \
+              npx drizzle-kit push --force 2>/dev/null || \
             docker compose -f docker/docker-compose.yml exec -T app \
               npx drizzle-kit push
-
-            echo "==> Vérification de l'état de l'application"
-            curl --fail --silent --max-time 10 http://localhost > /dev/null && \
-              echo "Application en ligne et opérationnelle" || \
-              (echo "ERREUR: L'application ne répond pas" && exit 1)
 
             echo "==> Déploiement terminé avec succès"
