@@ -42,11 +42,12 @@ jobs:
             echo "==> Récupération des dernières modifications"
             git pull origin main
 
-            echo "==> Reconstruction de l'image Docker"
+            echo "==> Arrêt propre et reconstruction"
+            docker compose -f docker/docker-compose.yml down --remove-orphans
             docker compose -f docker/docker-compose.yml build
 
             echo "==> Redémarrage des services"
-            docker compose -f docker/docker-compose.yml up -d
+            docker compose -f docker/docker-compose.yml up -d --force-recreate
 
             echo "==> Attente que la base de données soit prête"
             sleep 5
@@ -58,7 +59,7 @@ jobs:
               npx drizzle-kit push
 
             echo "==> Vérification de l'état de l'application"
-            curl --fail --silent --max-time 10 http://localhost:4321 > /dev/null && \
+            curl --fail --silent --max-time 10 http://localhost > /dev/null && \
               echo "Application en ligne et opérationnelle" || \
               (echo "ERREUR: L'application ne répond pas" && exit 1)
 
