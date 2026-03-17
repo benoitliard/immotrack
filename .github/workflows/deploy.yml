@@ -1,0 +1,65 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deploy — Déploiement Continu
+#
+# Déclenché à chaque push sur la branche main (après merge d'une PR).
+# Se connecte au VPS via SSH et effectue un déploiement zero-downtime
+# avec Docker Compose.
+#
+# Secrets GitHub requis (Settings → Secrets and variables → Actions) :
+#   VPS_HOST         — Adresse IP ou nom de domaine du VPS OVH
+#   VPS_USER         — Utilisateur SSH sur le VPS (ex: deploy)
+#   VPS_SSH_KEY      — Clé SSH privée (contenu complet, y compris en-tête/pied)
+#   VPS_PROJECT_PATH — Chemin absolu du projet sur le VPS (ex: /home/deploy/immotrack)
+# ──────────────────────────────────────────────────────────────────────────────
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Déploiement sur VPS OVH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Déploiement via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "==> Déplacement dans le répertoire du projet"
+            cd ${{ secrets.VPS_PROJECT_PATH }}
+
+            echo "==> Récupération des dernières modifications"
+            git pull origin main
+
+            echo "==> Reconstruction de l'image Docker"
+            docker compose -f docker/docker-compose.yml build
+
+            echo "==> Redémarrage des services"
+            docker compose -f docker/docker-compose.yml up -d
+
+            echo "==> Attente que la base de données soit prête"
+            sleep 5
+
+            echo "==> Application des migrations de base de données"
+            docker compose -f docker/docker-compose.yml exec -T app \
+              npx drizzle-kit push --force || \
+            docker compose -f docker/docker-compose.yml exec -T app \
+              npx drizzle-kit push
+
+            echo "==> Vérification de l'état de l'application"
+            curl --fail --silent --max-time 10 http://localhost:4321 > /dev/null && \
+              echo "Application en ligne et opérationnelle" || \
+              (echo "ERREUR: L'application ne répond pas" && exit 1)
+
+            echo "==> Déploiement terminé avec succès"

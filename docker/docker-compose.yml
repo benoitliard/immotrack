@@ -3,13 +3,19 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    ports:
-      - "4321:4321"
+    # Port exposé uniquement en interne — Caddy fait office de reverse proxy
+    expose:
+      - "4321"
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
       - ../.env
+    volumes:
+      # Volume persistant pour les fichiers uploadés par les utilisateurs
+      - uploads_data:/app/data/uploads
+    networks:
+      - internal
     restart: unless-stopped
 
   postgres:
@@ -20,6 +26,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # Pas de ports exposés à l'extérieur — accès uniquement via le réseau interne
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -32,15 +41,25 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # DOMAIN doit être défini dans le fichier .env (ex: immotrack.example.com)
+      DOMAIN: ${DOMAIN:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - app
+    networks:
+      - internal
     restart: unless-stopped
 
 volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  uploads_data:
+
+networks:
+  internal:
+    driver: bridge

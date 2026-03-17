@@ -3,11 +3,14 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies first (cache layer)
+# Copie des fichiers de dépendances en premier (optimisation du cache Docker)
 COPY package*.json ./
-RUN npm ci
 
-# Copy source and build
+# --legacy-peer-deps est nécessaire car better-auth déclare un peer dep
+# optionnel sur SvelteKit qui entre en conflit avec Vite 7 d'Astro
+RUN npm install --legacy-peer-deps
+
+# Copie du code source et compilation
 COPY . .
 RUN npm run build
 
@@ -16,12 +19,26 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Copy built output
+# Copie du résultat de la compilation
 COPY --from=builder /app/dist ./dist
 
-# Install only production dependencies
+# Copie des fichiers nécessaires aux migrations Drizzle
+COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/src/db ./src/db
+
+# Installation des dépendances de production uniquement
+# --legacy-peer-deps requis pour la même raison que le stage builder
 COPY --from=builder /app/package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev --legacy-peer-deps
+
+# Création du répertoire pour les fichiers uploadés
+RUN mkdir -p /app/data/uploads
+
+# Utilisation d'un utilisateur non-root pour la sécurité
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN chown -R appuser:appgroup /app
+USER appuser
 
 EXPOSE 4321
 
