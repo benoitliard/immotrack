@@ -22,10 +22,10 @@ WORKDIR /app
 # Copie du résultat de la compilation
 COPY --from=builder /app/dist ./dist
 
-# Copie des fichiers nécessaires aux migrations Drizzle
-COPY --from=builder /app/drizzle ./drizzle
+# Copie des fichiers nécessaires à drizzle-kit push (schema + config)
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/src/db ./src/db
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Installation des dépendances de production uniquement
 # --legacy-peer-deps requis pour la même raison que le stage builder

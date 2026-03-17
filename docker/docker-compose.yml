@@ -20,10 +20,8 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+    env_file:
+      - ../.env
     volumes:
       - pgdata:/var/lib/postgresql/data
     # Pas de ports exposés à l'extérieur — accès uniquement via le réseau interne
@@ -41,9 +39,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      # DOMAIN doit être défini dans le fichier .env (ex: immotrack.example.com)
-      DOMAIN: ${DOMAIN:-localhost}
+    env_file:
+      - ../.env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
