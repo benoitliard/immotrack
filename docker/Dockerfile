@@ -42,4 +42,8 @@ USER appuser
 
 EXPOSE 4321
 
+# Astro standalone écoute sur localhost par défaut — forcer 0.0.0.0 pour Docker
+ENV HOST=0.0.0.0
+ENV PORT=4321
+
 CMD ["node", "./dist/server/entry.mjs"]
